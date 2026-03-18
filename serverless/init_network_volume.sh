@@ -129,45 +129,14 @@ for dir in "${DIRS[@]}"; do
 done
 
 # =============================================================================
-# Phase 2: Python Virtual Environment
+# Phase 2: Python Virtual Environment (handled by WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh)
 # =============================================================================
 
-print_header "Phase 2: Installing Python Virtual Environment"
+print_header "Phase 2: Python Virtual Environment"
 
-if [[ ! -f "$VENV_PATH/bin/activate" ]]; then
-    log_info "Creating virtual environment at $VENV_PATH"
-    python3.11 -m venv "$VENV_PATH"
-    log_success "Virtual environment created"
-else
-    log_info "Virtual environment already exists"
-fi
-
-# Activate venv
-source "$VENV_PATH/bin/activate"
-log_success "Virtual environment activated"
-
-# Upgrade pip
-log_info "Upgrading pip..."
-pip install --upgrade pip setuptools wheel
-log_success "pip upgraded"
-
-# Install ComfyUI dependencies
-log_info "Installing ComfyUI dependencies..."
-
-if [[ -f "$COMFYUI_DIR/requirements.txt" ]]; then
-    pip install -r "$COMFYUI_DIR/requirements.txt"
-    log_success "ComfyUI requirements installed"
-else
-    log_warning "No requirements.txt found, installing core dependencies"
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-    pip install opencv-python pillow numpy scipy einops transformers safetensors
-    log_success "Core dependencies installed"
-fi
-
-# Install serverless handler dependencies
-log_info "Installing serverless dependencies..."
-pip install runpod==1.7.3 boto3==1.34.34 aiofiles==23.2.1
-log_success "Serverless dependencies installed"
+log_info "Python venv will be created by WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh"
+log_info "Venv location: $COMFYUI_DIR/venv"
+log_info "This phase will be handled in Phase 3 during model download"
 
 # =============================================================================
 # Phase 3: Model Downloads
@@ -201,16 +170,46 @@ log_info "  - VAE: ~242MB"
 log_info "  - Lightning LoRAs: ~8GB"
 echo ""
 
-# Run the install script with network volume paths as environment variables
-export VENV_DIR="$VENV_PATH"
+# Run the install script with environment variables
+# Note: WAN script creates venv in COMFYUI_DIR by default (./venv)
+# We let it create there, then move to network volume after
+export VENV_DIR="venv"
 export PYTHON_BIN="python3.11"
 
+# Tell the install script to use network volume for models
+# The script already looks for models/ directory, which we created in Phase 1
+
 if bash "$INSTALL_SCRIPT"; then
-    log_success "Model downloads completed"
+    log_success "Model downloads and venv setup completed"
 else
     log_error "Model download failed"
     log_error "Check logs above for details"
     exit 1
+fi
+
+# Move venv to network volume for persistence across containers
+if [[ -d "$COMFYUI_DIR/venv" ]]; then
+    log_info "Moving venv to network volume for persistence..."
+
+    # Remove old venv on network volume if exists
+    rm -rf "$VENV_PATH"
+
+    # Copy venv to network volume (use cp not mv to preserve original)
+    cp -a "$COMFYUI_DIR/venv" "$VENV_PATH"
+
+    log_success "Venv copied to $VENV_PATH"
+    log_info "Original venv remains at $COMFYUI_DIR/venv for Docker container use"
+else
+    log_warning "Venv not found at $COMFYUI_DIR/venv"
+fi
+
+# Install serverless handler dependencies into network volume venv
+if [[ -f "$VENV_PATH/bin/activate" ]]; then
+    log_info "Installing serverless dependencies..."
+    source "$VENV_PATH/bin/activate"
+    pip install --upgrade pip setuptools wheel
+    pip install runpod==1.7.3 boto3==1.34.34 aiofiles==23.2.1
+    log_success "Serverless dependencies installed"
 fi
 
 # Return to workspace root
@@ -277,12 +276,15 @@ else
     log_warning "No LoRA files found (optional)"
 fi
 
-# Check venv
+# Check venv (check both locations)
 if [[ -f "$VENV_PATH/bin/python" ]]; then
     PYTHON_VERSION=$("$VENV_PATH/bin/python" --version)
-    log_success "Python venv: $PYTHON_VERSION"
+    log_success "Python venv (network volume): $PYTHON_VERSION"
+elif [[ -f "$COMFYUI_DIR/venv/bin/python" ]]; then
+    PYTHON_VERSION=$("$COMFYUI_DIR/venv/bin/python" --version)
+    log_success "Python venv (ComfyUI dir): $PYTHON_VERSION"
 else
-    log_error "Python venv not properly installed"
+    log_error "Python venv not found in either location"
     exit 1
 fi
 
