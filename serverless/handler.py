@@ -458,9 +458,9 @@ async def handler_async(job: Dict) -> Dict:
             "duration": duration
         }
 
-def handler(job: Dict) -> Dict:
-    """Synchronous wrapper for RunPod"""
-    return asyncio.run(handler_async(job))
+async def handler(job: Dict) -> Dict:
+    """Async handler for RunPod serverless (RunPod supports async handlers)"""
+    return await handler_async(job)
 
 # =============================================================================
 # Startup
