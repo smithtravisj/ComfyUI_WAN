@@ -49,8 +49,10 @@ Docker Command: (leave default)
 
 **Network Volume**:
 - Click **Select Network Storage**
-- Choose your initialized network volume
-- Mount Path: `/workspace`
+- Choose your initialized network volume: `comfy-ui - US-IL-1`
+- Mount path: `/runpod-volume` (default - leave as is)
+  - The Docker container creates a symlink: `/workspace` → `/runpod-volume`
+  - Handler code uses `/workspace`, which automatically points to the network volume
 
 **Advanced Configuration**:
 ```

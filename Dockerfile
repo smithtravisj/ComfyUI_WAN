@@ -71,8 +71,12 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 RUN mkdir -p \
     /comfyui/output \
     /comfyui/temp \
-    /comfyui/input \
-    /workspace
+    /comfyui/input
+
+# Create symlink: /workspace -> /runpod-volume for RunPod serverless compatibility
+# RunPod mounts network volumes at /runpod-volume by default
+# Our handler expects /workspace, so we symlink it
+RUN ln -sf /runpod-volume /workspace
 
 # Copy serverless handler files
 COPY serverless/handler.py /comfyui/handler.py
