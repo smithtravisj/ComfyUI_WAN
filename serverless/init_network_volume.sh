@@ -32,7 +32,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 WORKSPACE="/workspace"
-COMFYUI_DIR="/comfyui"
+COMFYUI_DIR="${WORKSPACE}/ComfyUI_WAN"
 VENV_PATH="${WORKSPACE}/venv"
 MODELS_DIR="${WORKSPACE}/models"
 OUTPUT_DIR="${WORKSPACE}/output"
@@ -180,25 +180,20 @@ INSTALL_SCRIPT="$COMFYUI_DIR/WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh"
 
 if [[ ! -f "$INSTALL_SCRIPT" ]]; then
     log_error "Installation script not found: $INSTALL_SCRIPT"
-    log_error "Please ensure you're running from ComfyUI WAN 2.2 directory"
+    log_error "Expected location: $COMFYUI_DIR/WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh"
+    log_error "Current directory: $(pwd)"
+    log_error "ComfyUI_WAN directory exists: $(test -d "$COMFYUI_DIR" && echo "YES" || echo "NO")"
+    if [[ -d "$COMFYUI_DIR" ]]; then
+        log_info "Contents of $COMFYUI_DIR:"
+        ls -la "$COMFYUI_DIR" | head -20
+    fi
     exit 1
 fi
 
-# Modify paths in install script to use network volume
-log_info "Adapting installation script for network volume..."
+# Change to ComfyUI directory for installation
+cd "$COMFYUI_DIR"
 
-# Create temporary modified script
-TEMP_INSTALL_SCRIPT="/tmp/install_network_volume.sh"
-cp "$INSTALL_SCRIPT" "$TEMP_INSTALL_SCRIPT"
-
-# Replace paths to use network volume
-sed -i "s|/comfyui/models|$MODELS_DIR|g" "$TEMP_INSTALL_SCRIPT"
-sed -i "s|cd /comfyui|cd $COMFYUI_DIR|g" "$TEMP_INSTALL_SCRIPT"
-
-# Make executable
-chmod +x "$TEMP_INSTALL_SCRIPT"
-
-log_info "Running model download script..."
+log_info "Running model download script from $COMFYUI_DIR..."
 log_info "This will download:"
 log_info "  - 4× UNET models (Q8_0): ~50GB total"
 log_info "  - Text encoder: ~4GB"
@@ -206,8 +201,11 @@ log_info "  - VAE: ~242MB"
 log_info "  - Lightning LoRAs: ~8GB"
 echo ""
 
-# Run the modified install script
-if bash "$TEMP_INSTALL_SCRIPT"; then
+# Run the install script with network volume paths as environment variables
+export VENV_DIR="$VENV_PATH"
+export PYTHON_BIN="python3.11"
+
+if bash "$INSTALL_SCRIPT"; then
     log_success "Model downloads completed"
 else
     log_error "Model download failed"
@@ -215,81 +213,26 @@ else
     exit 1
 fi
 
-# Clean up temporary script
-rm -f "$TEMP_INSTALL_SCRIPT"
+# Return to workspace root
+cd "$WORKSPACE"
 
 # =============================================================================
-# Phase 4: Custom Nodes Installation
+# Phase 4: Custom Nodes Installation (handled by WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh)
 # =============================================================================
 
-print_header "Phase 4: Installing Custom Nodes"
+print_header "Phase 4: Custom Nodes Installation"
 
-cd "$COMFYUI_DIR/custom_nodes"
+log_success "Custom nodes installed by WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh"
+log_info "The installation script already cloned and configured all required custom nodes"
 
-# List of required custom nodes (from WAN2_2-ULTRA-AUTO_INSTALL-RUNPOD.sh)
-CUSTOM_NODES=(
-    "https://github.com/ltdrdata/ComfyUI-Manager"
-    "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite"
-    "https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet"
-    "https://github.com/Fannovel16/comfyui_controlnet_aux"
-    "https://github.com/jags111/efficiency-nodes-comfyui"
-    "https://github.com/crystian/ComfyUI-Crystools"
-    "https://github.com/cubiq/ComfyUI_essentials"
-    "https://github.com/cubiq/ComfyUI_IPAdapter_plus"
-    "https://github.com/kijai/ComfyUI-Florence2"
-    "https://github.com/chflame163/ComfyUI_LayerStyle"
-    "https://github.com/Acly/comfyui-inpaint-nodes"
-    "https://github.com/cubiq/ComfyUI_InstantID"
-    "https://github.com/pythongosssss/ComfyUI-Custom-Scripts"
-    "https://github.com/rgthree/rgthree-comfy"
-    "https://github.com/LarryJane491/Image-Captioning-in-ComfyUI"
-    "https://github.com/kijai/ComfyUI-KJNodes"
-    "https://github.com/Gourieff/comfyui-reactor-node"
-    "https://github.com/alessandrozonta/ComfyUI-ClapAPI"
-)
-
-NODE_COUNT=0
-FAILED_NODES=()
-
-for repo_url in "${CUSTOM_NODES[@]}"; do
-    NODE_NAME=$(basename "$repo_url")
-    NODE_COUNT=$((NODE_COUNT + 1))
-
-    log_info "[$NODE_COUNT/${#CUSTOM_NODES[@]}] Installing: $NODE_NAME"
-
-    if [[ -d "$NODE_NAME" ]]; then
-        log_info "Already exists, pulling updates..."
-        cd "$NODE_NAME"
-        if git pull; then
-            log_success "Updated: $NODE_NAME"
-        else
-            log_warning "Update failed: $NODE_NAME"
-        fi
-        cd ..
-    else
-        if git clone "$repo_url"; then
-            log_success "Installed: $NODE_NAME"
-        else
-            log_error "Failed: $NODE_NAME"
-            FAILED_NODES+=("$NODE_NAME")
-        fi
-    fi
-
-    # Install node dependencies if requirements.txt exists
-    if [[ -f "$NODE_NAME/requirements.txt" ]]; then
-        log_info "Installing dependencies for $NODE_NAME..."
-        pip install -r "$NODE_NAME/requirements.txt" || log_warning "Some dependencies failed for $NODE_NAME"
-    fi
-done
-
-echo ""
-log_success "Custom node installation complete"
-
-if [[ ${#FAILED_NODES[@]} -gt 0 ]]; then
-    log_warning "Failed nodes (may not be critical):"
-    for node in "${FAILED_NODES[@]}"; do
-        echo "  - $node"
-    done
+# Count installed nodes for reporting
+if [[ -d "$COMFYUI_DIR/custom_nodes" ]]; then
+    NODE_COUNT=$(find "$COMFYUI_DIR/custom_nodes" -maxdepth 1 -type d | wc -l)
+    NODE_COUNT=$((NODE_COUNT - 1))  # Subtract 1 for the custom_nodes directory itself
+    log_info "Total custom nodes installed: $NODE_COUNT"
+else
+    log_warning "custom_nodes directory not found"
+    NODE_COUNT=0
 fi
 
 # =============================================================================
