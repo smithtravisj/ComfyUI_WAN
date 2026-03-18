@@ -34,7 +34,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/comfyui-wan-serverless
+  IMAGE_NAME: ${{ github.repository_owner }}/comfyui-wan-serverless
 
 jobs:
   build:
