@@ -1,0 +1,126 @@
+version: '3.8'
+
+# Docker Compose for Local Testing of ComfyUI WAN 2.2 Serverless
+#
+# Usage:
+#   1. Build image: docker compose -f docker-compose.test.yml build
+#   2. Start services: docker compose -f docker-compose.test.yml up
+#   3. Test handler: python test_handler.py
+#   4. Stop: docker compose -f docker-compose.test.yml down
+#
+# Requirements:
+#   - Docker with GPU support (nvidia-docker2)
+#   - NVIDIA GPU with 24GB+ VRAM
+#   - Network volume initialized (run init_network_volume.sh first)
+
+services:
+  comfyui-serverless:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BUILDTIME: "${BUILDTIME:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}"
+        VERSION: "${VERSION:-test}"
+        REVISION: "${REVISION:-local}"
+    image: comfyui-wan-serverless:test
+    container_name: comfyui-test
+
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Environment variables
+    environment:
+      # Paths
+      - MODELS_DIR=/workspace/models
+      - OUTPUT_DIR=/workspace/output
+      - TEMP_DIR=/workspace/temp
+      - VENV_PATH=/workspace/venv
+
+      # Cache configuration
+      - CACHE_TYPE=RAM_PRESSURE
+      - CACHE_RAM=16.0
+
+      # Features
+      - WARMUP_MODELS=true
+      - CLEANUP_OUTPUTS=false  # Keep outputs for testing
+
+      # CUDA optimization
+      - CUDA_MODULE_LOADING=LAZY
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+      # S3/R2 (optional for local testing)
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
+      - R2_SECRET_KEY=${R2_SECRET_KEY:-}
+      - R2_BUCKET=${R2_BUCKET:-comfyui-outputs}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL:-}
+
+      # RunPod simulation
+      - RUNPOD_POD_ID=test-pod
+      - RUNPOD_JOB_ID=test-job
+
+    # Volume mounts
+    volumes:
+      # Network volume simulation (use local path or mounted network volume)
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+
+      # Code mounts for live development
+      - ../serverless/handler.py:/comfyui/handler.py:ro
+      - ../serverless/warmup.py:/comfyui/warmup.py:ro
+
+    # Ports
+    ports:
+      - "8188:8188"  # For potential web UI testing
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import handler; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: LocalStack for S3 testing
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack-s3
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    ports:
+      - "4566:4566"  # LocalStack gateway
+    volumes:
+      - "./localstack-data:/tmp/localstack"
+    profiles:
+      - s3-testing
+
+# Networks
+networks:
+  default:
+    name: comfyui-test-network
+
+# Volumes
+volumes:
+  workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${WORKSPACE_PATH:-./workspace}

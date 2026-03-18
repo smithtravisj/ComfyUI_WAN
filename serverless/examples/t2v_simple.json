@@ -1,0 +1,111 @@
+{
+  "_meta": {
+    "description": "Simple Text-to-Video workflow using WAN 2.2 T2V model",
+    "purpose": "Generate short video from text prompt",
+    "model": "Wan2.2-T2V-A14B-HighNoise-Q8_0.gguf",
+    "duration": "~90-120 seconds (cold start with UNET load)",
+    "vram": "~18-20GB peak",
+    "output": "MP4 video, ~4-8 seconds @ 24fps"
+  },
+  "1": {
+    "inputs": {
+      "clip_name1": "umt5-xxl-encoder-Q5_K_S.gguf",
+      "clip_name2": "umt5-xxl-encoder-Q5_K_S.gguf",
+      "type": "gguf"
+    },
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "Load Text Encoder"
+    }
+  },
+  "2": {
+    "inputs": {
+      "text": "A majestic lion walking through tall grass at sunset, cinematic lighting, photorealistic, 4k quality",
+      "clip": ["1", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "3": {
+    "inputs": {
+      "text": "blurry, low quality, distorted, watermark, text, ugly, deformed",
+      "clip": ["1", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative Prompt"
+    }
+  },
+  "4": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "5": {
+    "inputs": {
+      "unet_name": "Wan2.2-T2V-A14B-HighNoise-Q8_0.gguf"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load T2V UNET (High Noise)"
+    }
+  },
+  "6": {
+    "inputs": {
+      "width": 832,
+      "height": 480,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Initialize Latent Space"
+    }
+  },
+  "7": {
+    "inputs": {
+      "seed": 42,
+      "steps": 25,
+      "cfg": 7.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1.0,
+      "model": ["5", 0],
+      "positive": ["2", 0],
+      "negative": ["3", 0],
+      "latent_image": ["6", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Sample Latent Video"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["4", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode to Pixels"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "wan_t2v",
+      "fps": 24,
+      "format": "video/h264-mp4",
+      "images": ["8", 0]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Save as MP4",
+      "note": "Requires VideoHelperSuite custom node"
+    }
+  }
+}

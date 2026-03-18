@@ -24,3 +24,12 @@ web_custom_versions/
 openapi.yaml
 filtered-openapi.yaml
 uv.lock
+
+# Serverless workspace and artifacts
+serverless/workspace/
+serverless/localstack-data/
+serverless/*.log
+serverless/.env
+!serverless/.env.example
+serverless/output/
+serverless/temp/

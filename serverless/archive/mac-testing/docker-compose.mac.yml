@@ -1,0 +1,76 @@
+version: '3.8'
+
+# Docker Compose for Mac Local Testing (CPU mode)
+#
+# Usage:
+#   1. Start: docker compose -f docker-compose.mac.yml up -d
+#   2. Test: python test_handler.py --local
+#   3. Stop: docker compose -f docker-compose.mac.yml down
+#
+# Note: This runs in CPU mode since Macs don't have NVIDIA GPUs
+
+services:
+  comfyui-serverless:
+    image: comfyui-wan-serverless:test
+    container_name: comfyui-test
+    platform: linux/amd64
+
+    # Environment variables (CPU mode)
+    environment:
+      # Paths
+      - MODELS_DIR=/workspace/models
+      - OUTPUT_DIR=/workspace/output
+      - TEMP_DIR=/workspace/temp
+      - VENV_PATH=/workspace/venv
+
+      # Cache configuration
+      - CACHE_TYPE=RAM_PRESSURE
+      - CACHE_RAM=8.0
+
+      # Features
+      - WARMUP_MODELS=false  # Skip warmup on CPU
+      - CLEANUP_OUTPUTS=false  # Keep outputs for testing
+
+      # CPU mode
+      - CUDA_VISIBLE_DEVICES=""
+      - FORCE_CPU=true
+
+      # RunPod simulation
+      - RUNPOD_POD_ID=test-pod-mac
+      - RUNPOD_JOB_ID=test-job-mac
+
+    # Volume mounts
+    volumes:
+      # Workspace with models (symlinked)
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+
+      # Code mounts for live development
+      - ../serverless/handler.py:/comfyui/handler.py:ro
+      - ../serverless/warmup.py:/comfyui/warmup.py:ro
+
+    # Ports
+    ports:
+      - "8188:8188"  # For potential web UI testing
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import handler; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Networks
+networks:
+  default:
+    name: comfyui-test-network

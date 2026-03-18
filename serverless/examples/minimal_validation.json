@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "description": "Minimal validation workflow for testing handler setup",
+    "purpose": "Validates VAE + Text Encoder loading without full generation",
+    "duration": "~30 seconds",
+    "vram": "~4GB"
+  },
+  "1": {
+    "inputs": {
+      "clip_name1": "umt5-xxl-encoder-Q5_K_S.gguf",
+      "clip_name2": "umt5-xxl-encoder-Q5_K_S.gguf",
+      "type": "gguf"
+    },
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "Load T5 Text Encoder"
+    }
+  },
+  "2": {
+    "inputs": {
+      "text": "A cat playing piano",
+      "clip": ["1", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Encode Positive Prompt"
+    }
+  },
+  "3": {
+    "inputs": {
+      "text": "blurry, low quality",
+      "clip": ["1", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Encode Negative Prompt"
+    }
+  },
+  "4": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  }
+}

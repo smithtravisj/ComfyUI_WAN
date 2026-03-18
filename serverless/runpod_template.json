@@ -1,0 +1,87 @@
+{
+  "name": "ComfyUI WAN 2.2 Serverless",
+  "description": "ComfyUI WAN 2.2 serverless endpoint with Docker + Network Volume architecture. Optimized for burst workloads with 50-60s cold start, 15-25s warm start.",
+  "dockerImage": "ghcr.io/YOUR_USERNAME/comfyui_wan/comfyui-wan-serverless:latest",
+  "dockerArgs": "",
+  "gpu": {
+    "gpuTypeId": "NVIDIA RTX 4090",
+    "gpuCount": 1
+  },
+  "containerDiskInGb": 20,
+  "volumeInGb": 100,
+  "volumeMountPath": "/workspace",
+  "ports": "",
+  "env": [
+    {
+      "key": "MODELS_DIR",
+      "value": "/workspace/models"
+    },
+    {
+      "key": "OUTPUT_DIR",
+      "value": "/workspace/output"
+    },
+    {
+      "key": "TEMP_DIR",
+      "value": "/workspace/temp"
+    },
+    {
+      "key": "VENV_PATH",
+      "value": "/workspace/venv"
+    },
+    {
+      "key": "CACHE_TYPE",
+      "value": "RAM_PRESSURE"
+    },
+    {
+      "key": "CACHE_RAM",
+      "value": "16.0"
+    },
+    {
+      "key": "WARMUP_MODELS",
+      "value": "true"
+    },
+    {
+      "key": "CLEANUP_OUTPUTS",
+      "value": "true"
+    },
+    {
+      "key": "CUDA_MODULE_LOADING",
+      "value": "LAZY"
+    },
+    {
+      "key": "PYTORCH_CUDA_ALLOC_CONF",
+      "value": "expandable_segments:True"
+    },
+    {
+      "key": "R2_ENDPOINT",
+      "value": "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com"
+    },
+    {
+      "key": "R2_ACCESS_KEY",
+      "value": "YOUR_R2_ACCESS_KEY"
+    },
+    {
+      "key": "R2_SECRET_KEY",
+      "value": "YOUR_R2_SECRET_KEY"
+    },
+    {
+      "key": "R2_BUCKET",
+      "value": "comfyui-outputs"
+    },
+    {
+      "key": "R2_PUBLIC_URL",
+      "value": "https://YOUR_CUSTOM_DOMAIN.com"
+    }
+  ],
+  "startupScript": "",
+  "scalerType": "QUEUE_DELAY",
+  "scalerValue": 5,
+  "minWorkers": 0,
+  "maxWorkers": 3,
+  "idleTimeout": 30,
+  "executionTimeout": 900,
+  "gpuIds": "",
+  "networkVolumeId": "YOUR_NETWORK_VOLUME_ID",
+  "imageName": "ComfyUI WAN 2.2",
+  "readme": "# ComfyUI WAN 2.2 Serverless\n\n## Architecture\n\n- **Docker Image**: ComfyUI code + handler + minimal dependencies (~3GB)\n- **Network Volume**: Models (65GB) + venv (8GB) + custom nodes (persistent)\n- **GPU**: RTX 4090 24GB VRAM\n- **Scaling**: minWorkers=0, maxWorkers=3 (zero idle cost)\n\n## Performance\n\n- **Cold Start**: 50-60 seconds (includes warmup)\n- **Warm Start**: 15-25 seconds\n- **Warmup Strategy**: Preload VAE + T5 encoder (~4GB VRAM)\n- **UNET Loading**: On-demand per workflow type\n\n## Supported Workflows\n\n- Text-to-Video (T2V) with Wan2.2-T2V models\n- Image-to-Video (I2V) with Wan2.2-I2V models\n- Lightning LoRAs for 4-step generation\n- Both High Noise and Low Noise variants\n\n## Configuration\n\n### Required Environment Variables\n\n**R2/S3 Storage** (for output uploads):\n- `R2_ENDPOINT`: Your Cloudflare R2 or S3 endpoint\n- `R2_ACCESS_KEY`: Access key ID\n- `R2_SECRET_KEY`: Secret access key\n- `R2_BUCKET`: Bucket name (e.g., `comfyui-outputs`)\n- `R2_PUBLIC_URL`: Public URL for accessing uploads (optional)\n\n**ComfyUI Configuration**:\n- `CACHE_TYPE`: Memory cache strategy (default: `RAM_PRESSURE`)\n- `CACHE_RAM`: RAM pressure threshold in GB (default: `16.0`)\n- `WARMUP_MODELS`: Enable model warmup (default: `true`)\n- `CLEANUP_OUTPUTS`: Delete local files after upload (default: `true`)\n\n### Network Volume Setup\n\nBefore deploying this endpoint, you must initialize the network volume:\n\n1. **Create Network Volume** in RunPod dashboard (100GB SSD)\n2. **Start GPU Pod** with network volume attached to `/workspace`\n3. **Clone repository** in the pod\n4. **Run initialization script**:\n   ```bash\n   cd ComfyUI_WAN\n   bash serverless/init_network_volume.sh\n   ```\n5. **Wait 30-40 minutes** for completion\n6. **Stop the pod** (network volume persists)\n7. **Update `networkVolumeId`** in this template\n\n### Docker Image Setup\n\nThe Docker image should be built and pushed to GitHub Container Registry:\n\n1. **Update `dockerImage`** field with your GHCR URL:\n   ```\n   ghcr.io/YOUR_GITHUB_USERNAME/comfyui_wan/comfyui-wan-serverless:latest\n   ```\n\n2. **Build options**:\n   - **GitHub Actions** (recommended): Fast native AMD64 builds\n     ```bash\n     cd serverless\n     ./build.sh latest --github\n     ```\n   - **Local build**: Slower on Mac (QEMU emulation)\n     ```bash\n     cd serverless\n     ./build.sh latest --push\n     ```\n\n3. **Verify architecture** is AMD64 (not ARM64)\n\n## Cost Estimation\n\nFor **10 requests/day** usage pattern:\n\n- **Network Volume**: $10/month (100GB SSD)\n- **Compute**: ~$15/month (25 hours @ $0.60/hour)\n- **S3 Storage**: $1/month (1GB stored)\n- **S3 Egress**: $2/month (20GB transferred)\n\n**Total**: ~$28/month\n\n**vs Persistent Pod**: $360/month (24/7 runtime)\n**Savings**: $332/month (92% reduction)\n\n## API Usage\n\n### Request Format\n\n```json\n{\n  \"input\": {\n    \"workflow\": {\n      \"1\": {\n        \"inputs\": {\n          \"text\": \"Your prompt here\",\n          \"seed\": 42\n        },\n        \"class_type\": \"CLIPTextEncode\"\n      },\n      ...\n    }\n  }\n}\n```\n\n### Response Format\n\n```json\n{\n  \"success\": true,\n  \"prompt_id\": \"job_id_1234567890\",\n  \"outputs\": [\n    {\n      \"filename\": \"output_00001.mp4\",\n      \"url\": \"https://your-domain.com/job_id_1234567890/output_00001.mp4\",\n      \"size\": 12345678,\n      \"type\": \"video/mp4\"\n    }\n  ],\n  \"execution_time\": 45.2,\n  \"total_duration\": 52.8,\n  \"message\": \"Generated 1 outputs\"\n}\n```\n\n## Troubleshooting\n\n### Cold Start Too Slow (>90s)\n\n1. **Check network volume**: Ensure it's SSD, not HDD\n2. **Verify warmup**: Check logs for warmup completion\n3. **Enable CUDA lazy loading**: `CUDA_MODULE_LOADING=LAZY` is set\n4. **Check venv activation**: Ensure `/workspace/venv` is being used\n\n### VRAM OOM Errors\n\n1. **Check model quantization**: Should be Q8_0, not FP16\n2. **Verify cache type**: `CACHE_TYPE=RAM_PRESSURE` is aggressive\n3. **Lower cache threshold**: Try `CACHE_RAM=14.0`\n4. **Check concurrent requests**: May need to lower `maxWorkers`\n\n### S3 Upload Failures\n\n1. **Verify credentials**: Check R2/S3 environment variables\n2. **Test bucket access**: Ensure bucket exists and is writable\n3. **Check network**: Verify pod has internet access\n4. **Review logs**: Look for boto3 error messages\n\n### Network Volume Not Found\n\n1. **Check initialization**: Look for `.initialized` marker file\n2. **Re-run init script**: May need to initialize again\n3. **Verify mount path**: Should be `/workspace`\n4. **Check models**: Ensure models exist in `/workspace/models`\n\n## Monitoring\n\n### Key Metrics\n\n- **Cold Start Latency**: Target < 65s (95th percentile)\n- **Warm Start Latency**: Target < 30s (95th percentile)\n- **VRAM Usage**: Should stay < 22GB peak\n- **S3 Upload Success Rate**: Target > 99%\n- **Request Success Rate**: Target > 95%\n\n### Logs\n\nCheck RunPod logs for:\n- Initialization progress\n- Model loading times\n- Execution errors\n- VRAM usage reports\n- S3 upload status\n\n## Support\n\n- **Documentation**: See `serverless/README.md` for detailed setup\n- **Build Issues**: See `serverless/README-GITHUB-ACTIONS.md`\n- **Quickstart**: See `serverless/QUICKSTART.md` for 8-minute setup\n- **GitHub Issues**: Report bugs at repository issues page\n\n## Version History\n\n- **1.0** (2024): Initial serverless implementation\n  - Docker + Network Volume architecture\n  - Direct async execution (queue bypass)\n  - Model warmup optimization\n  - S3/R2 integration\n  - RAM_PRESSURE cache strategy\n"
+}
