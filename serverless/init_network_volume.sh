@@ -187,6 +187,37 @@ else
     exit 1
 fi
 
+# Move models from ComfyUI_WAN/models to network volume
+log_info "Moving models to network volume..."
+
+if [[ -d "$COMFYUI_DIR/models" ]]; then
+    # Move each model directory to network volume
+    for model_type in unet text_encoders vae loras upscale_models; do
+        if [[ -d "$COMFYUI_DIR/models/$model_type" ]]; then
+            log_info "Moving $model_type models..."
+
+            # Create target directory if needed
+            mkdir -p "$MODELS_DIR/$model_type"
+
+            # Move files (not directory itself)
+            if [[ -n "$(ls -A "$COMFYUI_DIR/models/$model_type" 2>/dev/null)" ]]; then
+                mv "$COMFYUI_DIR/models/$model_type"/* "$MODELS_DIR/$model_type/" 2>/dev/null || true
+                log_success "Moved $model_type to network volume"
+            else
+                log_info "No $model_type files to move"
+            fi
+        fi
+    done
+
+    # Create symlink from ComfyUI models to network volume models
+    log_info "Creating symlink to network volume models..."
+    rm -rf "$COMFYUI_DIR/models"
+    ln -s "$MODELS_DIR" "$COMFYUI_DIR/models"
+    log_success "Symlinked $COMFYUI_DIR/models → $MODELS_DIR"
+else
+    log_warning "Models directory not found at $COMFYUI_DIR/models"
+fi
+
 # Move venv to network volume for persistence across containers
 if [[ -d "$COMFYUI_DIR/venv" ]]; then
     log_info "Moving venv to network volume for persistence..."
@@ -208,7 +239,8 @@ if [[ -f "$VENV_PATH/bin/activate" ]]; then
     log_info "Installing serverless dependencies..."
     source "$VENV_PATH/bin/activate"
     pip install --upgrade pip setuptools wheel
-    pip install runpod==1.7.3 boto3==1.34.34 aiofiles==23.2.1
+    # Use aiofiles>=24.1 to satisfy matrix-nio dependency
+    pip install runpod==1.7.3 boto3==1.34.34 "aiofiles>=24.1"
     log_success "Serverless dependencies installed"
 fi
 
