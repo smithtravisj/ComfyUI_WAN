@@ -201,8 +201,8 @@ async def validate_workflow(prompt: Dict) -> Tuple[bool, Optional[str]]:
 async def execute_workflow(
     prompt: Dict,
     prompt_id: str,
-    executor: execution.PromptExecutor,
-    server: PromptServer
+    executor: Any,  # execution.PromptExecutor when available
+    server: Any  # PromptServer when available
 ) -> Tuple[bool, Dict]:
     """Execute ComfyUI workflow without queue system"""
     try:
