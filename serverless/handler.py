@@ -38,12 +38,12 @@ sys.path.insert(0, str(COMFYUI_DIR))
 os.chdir(COMFYUI_DIR)
 
 # Temporarily disable custom_nodes by renaming directory during import
-# This prevents missing dependency errors from network volume custom nodes
+# This prevents missing dependency errors from custom nodes with missing dependencies
 CUSTOM_NODES_DIR = COMFYUI_DIR / "custom_nodes"
 CUSTOM_NODES_DISABLED = COMFYUI_DIR / "custom_nodes.disabled"
 custom_nodes_temporarily_disabled = False
 
-if CUSTOM_NODES_DIR.exists() and CUSTOM_NODES_DIR.is_symlink():
+if CUSTOM_NODES_DIR.exists():
     try:
         CUSTOM_NODES_DIR.rename(CUSTOM_NODES_DISABLED)
         custom_nodes_temporarily_disabled = True
