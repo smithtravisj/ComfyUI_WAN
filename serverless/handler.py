@@ -37,6 +37,20 @@ COMFYUI_DIR = Path("/comfyui")
 sys.path.insert(0, str(COMFYUI_DIR))
 os.chdir(COMFYUI_DIR)
 
+# Temporarily disable custom_nodes by renaming directory during import
+# This prevents missing dependency errors from network volume custom nodes
+CUSTOM_NODES_DIR = COMFYUI_DIR / "custom_nodes"
+CUSTOM_NODES_DISABLED = COMFYUI_DIR / "custom_nodes.disabled"
+custom_nodes_temporarily_disabled = False
+
+if CUSTOM_NODES_DIR.exists() and CUSTOM_NODES_DIR.is_symlink():
+    try:
+        CUSTOM_NODES_DIR.rename(CUSTOM_NODES_DISABLED)
+        custom_nodes_temporarily_disabled = True
+        print("ℹ Temporarily disabled custom_nodes for clean import")
+    except Exception as e:
+        print(f"WARNING: Could not disable custom_nodes: {e}")
+
 # Activate network volume venv
 VENV_PATH = Path("/workspace/venv")
 if VENV_PATH.exists():
@@ -60,9 +74,22 @@ try:
     from server import PromptServer
     import comfy.model_management
     COMFYUI_AVAILABLE = True
+    print("✓ ComfyUI core modules imported successfully")
 except ImportError as e:
     print(f"ERROR: Failed to import ComfyUI modules: {e}")
+    print(f"ERROR: This may be caused by a custom node with missing dependencies")
+    print(f"ERROR: Check custom_nodes directory and disable problematic nodes")
     COMFYUI_AVAILABLE = False
+    # Store the error for later reporting
+    COMFYUI_IMPORT_ERROR = str(e)
+finally:
+    # Re-enable custom_nodes after core import
+    if custom_nodes_temporarily_disabled and CUSTOM_NODES_DISABLED.exists():
+        try:
+            CUSTOM_NODES_DISABLED.rename(CUSTOM_NODES_DIR)
+            print("✓ Re-enabled custom_nodes directory")
+        except Exception as e:
+            print(f"WARNING: Could not re-enable custom_nodes: {e}")
 
 # Configure folder paths to use network volume
 if COMFYUI_AVAILABLE:
@@ -358,6 +385,15 @@ async def handler_async(job: Dict) -> Dict:
     print("=" * 70)
 
     start_time = time.time()
+
+    # Check if ComfyUI is available
+    if not COMFYUI_AVAILABLE:
+        error_details = globals().get('COMFYUI_IMPORT_ERROR', 'Unknown import error')
+        return {
+            "error": f"ComfyUI modules failed to import: {error_details}",
+            "details": "Check container logs. This may be caused by custom nodes with missing dependencies.",
+            "duration": time.time() - start_time
+        }
 
     try:
         # Parse workflow
